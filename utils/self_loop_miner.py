@@ -1,3 +1,5 @@
+import pm4py
+
 from utils.log_to_partial_orders import VARIANT_ACTIVITIES_KEY
 from pm4py.objects.powl.obj import OperatorPOWL, Transition, SilentTransition
 from pm4py.objects.process_tree.obj import Operator

@@ -1,1 +1,2 @@
-pm4py
+pm4py==2.7.14.2
+rustxes

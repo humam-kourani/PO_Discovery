@@ -1,111 +1,59 @@
-import datetime
 from collections import deque, defaultdict
-
 from typing import List, Dict, Tuple, Any
-
 import pandas as pd
 
-from pm4py.objects.log.obj import EventLog, Trace
-from pm4py.objects.log.util.interval_lifecycle import to_interval
-from pm4py.objects.powl.obj import Transition, StrictPartialOrder
-from pm4py.util.xes_constants import DEFAULT_NAME_KEY, DEFAULT_START_TIMESTAMP_KEY, DEFAULT_TIMESTAMP_KEY
+from utils.objects import VARIANT_FREQUENCY_KEY, ActivityInstance, Graph
 
 DEFAULT_CASE_ID_KEY = 'case:concept:name'
 DEFAULT_ACTIVITY_KEY = 'concept:name'
 DEFAULT_TIMESTAMP_KEY = 'time:timestamp'
 DEFAULT_LIFECYCLE_KEY = 'lifecycle:transition'
 DEFAULT_LIFECYCLE_INSTANCE_KEY = None
-VARIANT_FREQUENCY_KEY = "@@variant_frequency"
-VARIANT_ACTIVITIES_KEY = "@@activities"
-
-
-# @functools.total_ordering
-# class TimeUnit(str, Enum):
-#     MS = "Milliseconds"
-#     SEC = "Seconds"
-#     MIN = "Minutes"
-#     HOUR = "Hours"
-#     DAY = "Days"
-#     MONTH = "Month"
-#
-#     def __gt__(self, other):
-#         if isinstance(other, TimeUnit):
-#             return (
-#                     self._member_names_.index(self.name) >
-#                     self._member_names_.index(other.name)
-#             )
-#         return NotImplemented
-#
-#     def __lt__(self, other):
-#         if isinstance(other, TimeUnit):
-#             return (
-#                     self._member_names_.index(self.name) <
-#                     self._member_names_.index(other.name)
-#             )
-#         return NotImplemented
-#
-#     def __eq__(self, other):
-#         if isinstance(other, TimeUnit):
-#             return (
-#                     self._member_names_.index(self.name) ==
-#                     self._member_names_.index(other.name)
-#             )
-#         return NotImplemented
-
-
-def to_utc(timestamp: datetime):
-    if timestamp.utcoffset() is not None:
-        timestamp = timestamp - timestamp.utcoffset()
-
-    return timestamp.replace(tzinfo=None)
-
-
-# def transform_timestamp(timestamp: datetime):
-#     timestamp = to_utc(timestamp)
-#     if granularity is TimeUnit.SEC:
-#         return timestamp.replace(microsecond=0)
-#     elif granularity is TimeUnit.MIN:
-#         return timestamp.replace(microsecond=0, second=0)
-#     elif granularity is TimeUnit.HOUR:
-#         return timestamp.replace(microsecond=0, second=0, minute=0)
-#     elif granularity is TimeUnit.DAY:
-#         return timestamp.replace(microsecond=0, second=0, minute=0, hour=0)
-#     elif granularity is TimeUnit.MONTH:
-#         return timestamp.replace(microsecond=0, second=0, minute=0, hour=0, day=1)
-#     else:
-#         return timestamp
-
 
 def generate_interval_df_fifo(
     df: pd.DataFrame,
     case_id_col: str, activity_col: str, timestamp_col: str, lifecycle_col: str,
     start_transition: str, complete_transition: str, lifecycle_instance_col: str or None
 ) -> pd.DataFrame:
-    # ... (Exact same implementation as the previous response) ...
-    # Make sure it returns the interval_df with 'event_instance_id'
     work_df = df[[case_id_col, activity_col, timestamp_col, lifecycle_col] + ([lifecycle_instance_col] if lifecycle_instance_col else [])].copy()
     try:
-        if not pd.api.types.is_datetime64_any_dtype(work_df[timestamp_col]): work_df[timestamp_col] = pd.to_datetime(work_df[timestamp_col], utc=True)
-        elif work_df[timestamp_col].dt.tz is None: work_df[timestamp_col] = work_df[timestamp_col].dt.tz_localize('UTC')
-        else: work_df[timestamp_col] = work_df[timestamp_col].dt.tz_convert('UTC')
-    except Exception as e: raise ValueError(f"Failed to convert timestamp column '{timestamp_col}': {e}")
+        if not pd.api.types.is_datetime64_any_dtype(work_df[timestamp_col]):
+            work_df[timestamp_col] = pd.to_datetime(work_df[timestamp_col], utc=True)
+        elif work_df[timestamp_col].dt.tz is None:
+            work_df[timestamp_col] = work_df[timestamp_col].dt.tz_localize('UTC')
+        else:
+            work_df[timestamp_col] = work_df[timestamp_col].dt.tz_convert('UTC')
+    except Exception as e:
+        raise ValueError(f"Failed to convert timestamp column '{timestamp_col}': {e}")
     work_df[lifecycle_col] = work_df[lifecycle_col].str.lower()
     work_df = work_df.sort_values([case_id_col, timestamp_col])
     interval_list = []
     for case_id, trace_df in work_df.groupby(case_id_col, sort=False):
         activities_start: Dict[Tuple, deque] = {}
+        activities_ids: Dict[str, int] = {}
         for index, event in trace_df.iterrows():
-            activity = event[activity_col]; instance = event[lifecycle_instance_col] if lifecycle_instance_col else None
-            activity_key = (activity, instance); transition = event[lifecycle_col]; timestamp = event[timestamp_col]
+            activity = event[activity_col]
+            instance = event[lifecycle_instance_col] if lifecycle_instance_col else None
+            activity_key = (activity, instance)
+            transition = event[lifecycle_col]
+            timestamp = event[timestamp_col]
             if transition == start_transition.lower():
-                if activity_key not in activities_start: activities_start[activity_key] = deque()
+                if activity_key not in activities_start:
+                    activities_start[activity_key] = deque()
                 activities_start[activity_key].append({'timestamp': timestamp, 'event_index': index})
             elif transition == complete_transition.lower():
                 start_timestamp = timestamp
-                if activity_key in activities_start and activities_start[activity_key]: start_timestamp = activities_start[activity_key].popleft()['timestamp']
-                interval_record = { case_id_col: case_id, 'activity': activity, 'start_timestamp': start_timestamp, 'end_timestamp': timestamp, **( {lifecycle_instance_col: instance} if lifecycle_instance_col else {} ) }
+                if activity_key in activities_start and activities_start[activity_key]:
+                    start_timestamp = activities_start[activity_key].popleft()['timestamp']
+                if activity not in activities_ids:
+                    activities_ids[activity] = 1
+                else:
+                    activities_ids[activity] = activities_ids[activity] + 1
+                activity_instance = ActivityInstance(activity, activities_ids[activity])
+                interval_record = { case_id_col: case_id, 'activity': activity_instance, 'start_timestamp': start_timestamp, 'end_timestamp': timestamp, **( {lifecycle_instance_col: instance} if lifecycle_instance_col else {} ) }
                 interval_list.append(interval_record)
-    if not interval_list: return pd.DataFrame()
+    if not interval_list:
+        return pd.DataFrame()
     interval_df = pd.DataFrame(interval_list)
     interval_df['start_timestamp'] = pd.to_datetime(interval_df['start_timestamp'], utc=True)
     interval_df['end_timestamp'] = pd.to_datetime(interval_df['end_timestamp'], utc=True)
@@ -123,19 +71,9 @@ def transform_log_to_partially_ordered_variants(
     lifecycle_col: str = DEFAULT_LIFECYCLE_KEY,
     start_transition: str = "start",
     complete_transition: str = "complete",
-    lifecycle_instance_col: str = DEFAULT_LIFECYCLE_INSTANCE_KEY,
-    build_po_objects: bool = True # Control if final PO objects are needed
-) -> List[Any]: # Returns Dict summaries or StrictPartialOrder objects
+    lifecycle_instance_col: str = DEFAULT_LIFECYCLE_INSTANCE_KEY
+) -> List[Any]:
     """
-    Transforms log to PO variants efficiently using canonical keys and
-    dictionary-based grouping. Avoids expensive PO comparisons.
-
-    Args:
-        ... (standard args) ...
-        build_po_objects (bool): If True, builds StrictPartialOrder objects
-                                 for each unique variant at the end. Otherwise,
-                                 returns a list of dictionaries summarizing variants.
-
     Returns:
         List of variant summaries (dict) or StrictPartialOrder objects,
         sorted by frequency descending.
@@ -143,18 +81,16 @@ def transform_log_to_partially_ordered_variants(
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Input 'log' must be a Pandas DataFrame.")
 
-        # --- 1. Generate the Interval DataFrame ---
+
     interval_df = generate_interval_df_fifo(
         df, case_id_col, activity_col, timestamp_col, lifecycle_col,
         start_transition, complete_transition, lifecycle_instance_col
     )
 
     if interval_df.empty:
-        print("Interval DataFrame is empty, no variants to generate.")
-        return []
+        raise Exception("Interval DataFrame is empty, no variants to generate.")
 
-    # --- 2. Pre-calculate All Potential Edges (Vectorized Approach Recommended) ---
-    # This is generally faster than calculating edges per trace inside the loop
+    # Pre-calculate All Potential Edges
     print("Calculating potential direct succession edges...")
     merged_df = pd.merge(
         interval_df[[case_id_col, 'activity', 'start_timestamp', 'end_timestamp', 'event_instance_id']],
@@ -173,31 +109,24 @@ def transform_log_to_partially_ordered_variants(
         lambda g: tuple(sorted(zip(g['activity_1'], g['activity_2'])))  # Create sorted tuple of edge pairs
     ).to_dict()  # Convert to dictionary {case_id: tuple_of_edges}
 
-    # --- 3. Calculate Canonical Key per Trace and Group ---
+    # Calculate Canonical Key per Trace and Group ---
     print("Grouping traces by canonical variant key...")
-    # Use defaultdict to easily store frequency and other info
-    variants_data = defaultdict(lambda: {VARIANT_FREQUENCY_KEY: 0, 'cases': []})
+    variants_data = defaultdict(lambda: {VARIANT_FREQUENCY_KEY: 0})
 
     grouped_intervals = interval_df.groupby(case_id_col)
     total_cases = len(grouped_intervals)
     processed_cases = 0
 
     for case_id, trace_df in grouped_intervals:
-        # a) Activities (Multiset representation)
-        # Sort all activity occurrences in the trace
-        trace_activities_multiset = tuple(sorted(trace_df['activity'].tolist()))
+        trace_activities_multiset = frozenset(trace_df['activity'].tolist())
 
-        # b) Edges (Directly Follows representation)
-        # Look up pre-calculated edges for this case
-        trace_edges = edges_by_case.get(case_id, tuple())  # Get edges tuple, default to empty tuple if no edges
+        trace_edges = frozenset(edges_by_case.get(case_id, tuple()))
 
-        # c) Canonical Variant Key
+        # Canonical Variant Key
         variant_key = (trace_activities_multiset, trace_edges)
 
-        # d) Update dictionary
+        # Update dictionary
         variants_data[variant_key][VARIANT_FREQUENCY_KEY] += 1
-        variants_data[variant_key]['cases'].append(case_id)
-        # Store the structure once if not already present (needed for building PO later)
         if 'structure' not in variants_data[variant_key]:
             variants_data[variant_key]['structure'] = {'activities': trace_activities_multiset, 'edges': trace_edges}
 
@@ -207,58 +136,17 @@ def transform_log_to_partially_ordered_variants(
 
     print(f"Found {len(variants_data)} unique variants.")
 
-    # --- 4. Format Output ---
+    # Format Output ---
     output_list = []
     for variant_key, data in variants_data.items():
-        if build_po_objects:
-            # Build the StrictPartialOrder object ONLY for unique variants
-            po = StrictPartialOrder([])
-            structure = data['structure']
-            activity_labels = structure['activities']
-            edge_labels = structure['edges']
+        add_info = {
+            VARIANT_FREQUENCY_KEY: data[VARIANT_FREQUENCY_KEY],
+        }
+        order = Graph(variant_key[0], variant_key[1], add_info)
+        output_list.append(order)
 
-            # We need representative Transition objects. Since instance_id matters
-            # for the PO structure but isn't directly in the canonical key,
-            # we can't perfectly reconstruct the original PO without more info.
-            # Let's build a simplified PO based on labels only for this example.
-            # If instance-specific PO is needed, the canonical key needs refinement.
-            transitions_map: Dict[str, Transition] = {}
-            node_counter = defaultdict(int)
-            for act_label in activity_labels:
-                # Create pseudo-instance ID based on occurrence count
-                instance_num = node_counter[act_label]
-                node_counter[act_label] += 1
-                # Use label + count as unique ID for nodes in this representative PO
-                trans = Transition(label=act_label)
-                if act_label not in transitions_map:  # Only need one Transition per label for simplified PO
-                    transitions_map[act_label] = trans  # Store first instance
-                po.order.add_node(trans)  # Add nodes based on the multiset
-
-            # Add edges based on labels (WARNING: Potential ambiguity if multiple instances of same activity)
-            for act1_label, act2_label in edge_labels:
-                # Find *a* transition object for each label - this simplification might merge distinct paths
-                if act1_label in transitions_map and act2_label in transitions_map:
-                    po.add_edge(transitions_map[act1_label], transitions_map[act2_label])
-
-            po.additional_information = {VARIANT_FREQUENCY_KEY: data[VARIANT_FREQUENCY_KEY],
-                                         VARIANT_ACTIVITIES_KEY: list(activity_labels)}
-            # Add case IDs if desired
-            # po.additional_information['cases'] = data['cases']
-            output_list.append(po)
-        else:
-            # Return summary dictionary
-            summary = {
-                VARIANT_ACTIVITIES_KEY: list(variant_key[0]),  # Convert tuple back to list
-                'edges': list(variant_key[1]),  # Convert tuple back to list
-                VARIANT_FREQUENCY_KEY: data[VARIANT_FREQUENCY_KEY],
-                'num_cases': len(data['cases'])
-                # 'case_ids': data['cases'] # Optionally include case IDs
-            }
-            output_list.append(summary)
-
-    # Sort output by frequency
     output_list.sort(
-        key=lambda x: x.additional_information[VARIANT_FREQUENCY_KEY] if build_po_objects else x[VARIANT_FREQUENCY_KEY],
+        key=lambda x: x.additional_information[VARIANT_FREQUENCY_KEY],
         reverse=True)
 
     return output_list

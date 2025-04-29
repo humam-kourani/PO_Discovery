@@ -1,7 +1,7 @@
 import networkx as nx
 
-from utils.log_to_partial_orders import VARIANT_ACTIVITIES_KEY, VARIANT_FREQUENCY_KEY
-from pm4py.objects.powl.obj import Transition, StrictPartialOrder
+from utils.objects import Graph
+from utils.log_to_partial_orders import VARIANT_FREQUENCY_KEY
 from pm4py.algo.discovery.inductive.cuts import utils as cut_util
 
 
@@ -17,24 +17,24 @@ class LabeledXORMiner:
         :return: Groups of disjoint activities.
         """
 
-        all_activities = sorted(
-            set(activity for po in partial_orders for activity in po.additional_information[VARIANT_ACTIVITIES_KEY]))
+        all_activity_labels = sorted(
+            set(activity.label for graph in partial_orders for activity in graph.nodes))
 
-        adjacency = {activity: {other_activity: 0 for other_activity in all_activities} for activity in all_activities}
+        adjacency = {activity: {other_activity: 0 for other_activity in all_activity_labels} for activity in all_activity_labels}
 
-        for po in partial_orders:
-            activities_in_trace = po.additional_information[VARIANT_ACTIVITIES_KEY]
-            for i, activity in enumerate(activities_in_trace):
-                for j, other_activity in enumerate(activities_in_trace):
+        for graph in partial_orders:
+            activity_labels_in_trace = [node.label for node in graph.nodes]
+            for i, activity in enumerate(activity_labels_in_trace):
+                for j, other_activity in enumerate(activity_labels_in_trace):
                     if i != j:
                         adjacency[activity][other_activity] += 1
 
         found_xor = False
-        clusters = [[a] for a in all_activities]
-        for i in range(len(all_activities)):
-            activity = all_activities[i]
-            for j in range(i + 1, len(all_activities)):
-                other_activity = all_activities[j]
+        clusters = [[a] for a in all_activity_labels]
+        for i in range(len(all_activity_labels)):
+            activity = all_activity_labels[i]
+            for j in range(i + 1, len(all_activity_labels)):
+                other_activity = all_activity_labels[j]
                 if adjacency[activity][other_activity] == 0 and adjacency[other_activity][activity] == 0:
                     found_xor = True
                     clusters = cut_util.merge_lists_based_on_activities(activity, other_activity, clusters)
@@ -72,37 +72,32 @@ class LabeledXORMiner:
     @classmethod
     def project_partial_orders_on_groups(cls, partial_orders, group):
         res = []
-
-        for po in partial_orders:
-            new_nodes = [n for n in po.order.nodes if n.label in group]
+        for graph in partial_orders:
+            new_nodes = frozenset([n for n in graph.nodes if n.label in group])
             if len(new_nodes) == 0:
                 continue
-            new_po = StrictPartialOrder(nodes=new_nodes)
-            for n1 in new_nodes:
-                for n2 in new_nodes:
-                    if po.order.is_edge(n1, n2):
-                        new_po.order.add_edge(n1, n2)
+            new_edges = frozenset([(s, t) for (s, t) in graph.edges if s in new_nodes and t in new_nodes])
+            new_graph = Graph(new_nodes, new_edges)
             found = False
-            for other_po in res:
-                if other_po.equal_content(new_po):
-                    found = True
-                    other_po.additional_information[VARIANT_FREQUENCY_KEY] = other_po.additional_information[VARIANT_FREQUENCY_KEY] + po.additional_information[VARIANT_FREQUENCY_KEY]
-                    break
+            # for other_graph in res:
+            #     if other_graph == new_graph:
+            #         found = True
+            #         other_graph.additional_information[VARIANT_FREQUENCY_KEY] = other_graph.additional_information[VARIANT_FREQUENCY_KEY] + graph.additional_information[VARIANT_FREQUENCY_KEY]
+            #         break
             if not found:
-                new_po.additional_information = {VARIANT_FREQUENCY_KEY: po.additional_information[VARIANT_FREQUENCY_KEY],
-                                             VARIANT_ACTIVITIES_KEY: [n.label for n in new_nodes if isinstance(n, Transition)]}
-                res.append(new_po)
+                new_graph.additional_information = {VARIANT_FREQUENCY_KEY: graph.additional_information[VARIANT_FREQUENCY_KEY]}
+                res.append(new_graph)
         return res
 
     @classmethod
-    def has_empty_traces(cls, partial_orders, groups):
+    def has_empty_traces(cls, partial_orders, cluster):
         # res = StrictPartialOrder([Transition(a) for a in list(group)])
         all_nodes = []
-        for group in groups:
+        for group in cluster:
             all_nodes = all_nodes + list(group)
 
-        for po in partial_orders:
-            new_nodes = [n for n in po.order.nodes if n.label in all_nodes]
+        for graph in partial_orders:
+            new_nodes = [n for n in graph.nodes if n.label in all_nodes]
             if len(new_nodes) == 0:
                 return True
 

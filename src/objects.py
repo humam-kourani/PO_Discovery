@@ -1,7 +1,3 @@
-from cgitb import enable
-from collections import defaultdict
-from typing import Dict
-
 from pm4py.objects.powl.obj import StrictPartialOrder, Transition, OperatorPOWL, SilentTransition
 from pm4py.objects.process_tree.obj import Operator
 
@@ -81,7 +77,7 @@ class LOOP:
 
 
 class ActivityInstance:
-    def __init__(self, label: str, number: int):
+    def __init__(self, label: str|None, number: int):
         """
         Initialize an ActivityInstance.
 
@@ -183,12 +179,12 @@ def simplified_model_to_powl(model):
     elif not isinstance(model, Graph):
         raise NotImplementedError
 
+
     po = StrictPartialOrder([])
     submodels = model.nodes
     edges = model.edges
 
     powl_map = {}
-    # node_counter = defaultdict(int)
     for submodel in submodels:
         powl_child = simplified_model_to_powl(submodel)
         powl_map[submodel] = powl_child
@@ -197,15 +193,26 @@ def simplified_model_to_powl(model):
     for m1, m2 in edges:
         po.add_edge(powl_map[m1], powl_map[m2])
 
-    po.order.add_transitive_edges()
+    len_all = len(po.order.nodes)
 
-    for node in po.order.nodes:
-        for other_node in po.order.nodes:
-            if po.order.is_edge(node, other_node) and po.order.is_edge(other_node, node):
-                po.order.remove_edge_without_violating_transitivity(node, other_node)
-                po.order.remove_edge_without_violating_transitivity(other_node, node)
+    start_len = len(po.order.get_start_nodes())
+    if start_len > 1 and start_len != len_all:
+        start = SilentTransition()
+        po.order.add_node(start)
+        for node in set(po.order.nodes) - {start}:
+            po.add_edge(start, node)
 
-    if not po.order.is_strict_partial_order():
-        raise ValueError('Not strict_partial_order!')
+    end_len = len(po.order.get_end_nodes())
+    if end_len > 1 and end_len != len_all:
+        end = SilentTransition()
+        po.order.add_node(end)
+        for node in set(po.order.nodes) - {end}:
+            po.add_edge(node, end)
+
+    if not po.order.is_irreflexive():
+        raise ValueError('Not irreflexive!')
+
+    if not po.order.is_transitive():
+        raise ValueError('Not is_transitive!')
 
     return po

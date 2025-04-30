@@ -2,7 +2,7 @@ from collections import deque, defaultdict
 from typing import List, Dict, Tuple, Any
 import pandas as pd
 
-from utils.objects import VARIANT_FREQUENCY_KEY, ActivityInstance, Graph
+from src.objects import VARIANT_FREQUENCY_KEY, ActivityInstance, Graph
 
 DEFAULT_CASE_ID_KEY = 'case:concept:name'
 DEFAULT_ACTIVITY_KEY = 'concept:name'

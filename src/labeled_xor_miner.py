@@ -1,7 +1,7 @@
 import networkx as nx
 
-from utils.objects import Graph
-from utils.log_to_partial_orders import VARIANT_FREQUENCY_KEY
+from src.objects import Graph
+from src.log_to_partial_orders import VARIANT_FREQUENCY_KEY
 from pm4py.algo.discovery.inductive.cuts import utils as cut_util
 
 

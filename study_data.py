@@ -5,8 +5,8 @@ import pm4py
 import pandas as pd
 from pm4py.objects.powl.obj import StrictPartialOrder, Transition
 
-from algorithm import mine
-from utils.log_to_partial_orders import VARIANT_FREQUENCY_KEY, VARIANT_ACTIVITIES_KEY
+from test import mine
+from src.log_to_partial_orders import VARIANT_FREQUENCY_KEY
 
 pd.set_option('display.max_columns', None)
 

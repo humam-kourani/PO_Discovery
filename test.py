@@ -8,7 +8,7 @@ if __name__ == "__main__":
     # log = pm4py.read_xes(r"C:\Users\kourani\Downloads\example-logs\example-logs\repairExample.xes", variant="rustxes")
 
     # print(log)
-    # log = pm4py.read_xes("test_logs/interval_event_log_with_LC - skip make delivery and multiple payment.xes", variant="rustxes")
+    # log = pm4py.read_xes("test_logs/interval_event_log_with_LC - xor in xor.xes", variant="rustxes")
     # print(log['lifecycle:transition'])
     # print(len(log))
     # complete_log = log[log['lifecycle:transition'].isin(["complete", "COMPLETE"])]
@@ -18,6 +18,7 @@ if __name__ == "__main__":
     import datetime
     start_time = datetime.datetime.now()
     partial_orders = transform_log_to_partially_ordered_variants(log)
+    print(partial_orders)
     print(len(partial_orders))
     # print(partial_orders)
     # for graph_order in partial_orders:

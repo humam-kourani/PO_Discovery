@@ -12,21 +12,22 @@ DEFAULT_LIFECYCLE_INSTANCE_KEY = None
 
 def generate_interval_df_fifo(
     df: pd.DataFrame,
-    case_id_col: str, activity_col: str, timestamp_col: str, lifecycle_col: str,
+    case_id_col: str, activity_col: str, ordering_col: str, lifecycle_col: str or None,
     start_transition: str, complete_transition: str, lifecycle_instance_col: str or None
 ) -> pd.DataFrame:
-    work_df = df[[case_id_col, activity_col, timestamp_col, lifecycle_col] + ([lifecycle_instance_col] if lifecycle_instance_col else [])].copy()
-    try:
-        if not pd.api.types.is_datetime64_any_dtype(work_df[timestamp_col]):
-            work_df[timestamp_col] = pd.to_datetime(work_df[timestamp_col], utc=True)
-        elif work_df[timestamp_col].dt.tz is None:
-            work_df[timestamp_col] = work_df[timestamp_col].dt.tz_localize('UTC')
-        else:
-            work_df[timestamp_col] = work_df[timestamp_col].dt.tz_convert('UTC')
-    except Exception as e:
-        raise ValueError(f"Failed to convert timestamp column '{timestamp_col}': {e}")
-    work_df[lifecycle_col] = work_df[lifecycle_col].str.lower()
-    work_df = work_df.sort_values([case_id_col, timestamp_col])
+    work_df = df[[case_id_col, activity_col, ordering_col] + ([lifecycle_col] if lifecycle_col else []) + ([lifecycle_instance_col] if lifecycle_instance_col else [])].copy()
+    # try:
+    #     if not pd.api.types.is_datetime64_any_dtype(work_df[timestamp_col]):
+    #         work_df[timestamp_col] = pd.to_datetime(work_df[timestamp_col], utc=True)
+    #     elif work_df[timestamp_col].dt.tz is None:
+    #         work_df[timestamp_col] = work_df[timestamp_col].dt.tz_localize('UTC')
+    #     else:
+    #         work_df[timestamp_col] = work_df[timestamp_col].dt.tz_convert('UTC')
+    # except Exception as e:
+    #     raise ValueError(f"Failed to convert timestamp column '{timestamp_col}': {e}")
+    if lifecycle_col:
+        work_df[lifecycle_col] = work_df[lifecycle_col].str.lower()
+    work_df = work_df.sort_values([case_id_col, ordering_col])
     interval_list = []
     for case_id, trace_df in work_df.groupby(case_id_col, sort=False):
         activities_start: Dict[Tuple, deque] = {}
@@ -35,22 +36,33 @@ def generate_interval_df_fifo(
             activity = event[activity_col]
             instance = event[lifecycle_instance_col] if lifecycle_instance_col else None
             activity_key = (activity, instance)
-            transition = event[lifecycle_col]
-            timestamp = event[timestamp_col]
-            if transition == start_transition.lower():
-                if activity_key not in activities_start:
-                    activities_start[activity_key] = deque()
-                activities_start[activity_key].append({'timestamp': timestamp, 'event_index': index})
-            elif transition == complete_transition.lower():
-                start_timestamp = timestamp
-                if activity_key in activities_start and activities_start[activity_key]:
-                    start_timestamp = activities_start[activity_key].popleft()['timestamp']
+            timestamp = event[ordering_col]
+            if lifecycle_col:
+                transition = event[lifecycle_col]
+                if transition == start_transition.lower():
+                    if activity_key not in activities_start:
+                        activities_start[activity_key] = deque()
+                    activities_start[activity_key].append({'timestamp': timestamp, 'event_index': index})
+                elif transition == complete_transition.lower():
+                    start_timestamp = timestamp
+                    if activity_key in activities_start and activities_start[activity_key]:
+                        start_timestamp = activities_start[activity_key].popleft()['timestamp']
+                    if activity not in activities_ids:
+                        activities_ids[activity] = 1
+                    else:
+                        activities_ids[activity] = activities_ids[activity] + 1
+                    activity_instance = ActivityInstance(activity, activities_ids[activity])
+                    interval_record = { case_id_col: case_id, 'activity': activity_instance, 'start_timestamp': start_timestamp, 'end_timestamp': timestamp, **( {lifecycle_instance_col: instance} if lifecycle_instance_col else {} ) }
+                    interval_list.append(interval_record)
+            else:
                 if activity not in activities_ids:
                     activities_ids[activity] = 1
                 else:
                     activities_ids[activity] = activities_ids[activity] + 1
                 activity_instance = ActivityInstance(activity, activities_ids[activity])
-                interval_record = { case_id_col: case_id, 'activity': activity_instance, 'start_timestamp': start_timestamp, 'end_timestamp': timestamp, **( {lifecycle_instance_col: instance} if lifecycle_instance_col else {} ) }
+                interval_record = {case_id_col: case_id, 'activity': activity_instance,
+                                   'start_timestamp': timestamp, 'end_timestamp': timestamp,
+                                   **({lifecycle_instance_col: instance} if lifecycle_instance_col else {})}
                 interval_list.append(interval_record)
     if not interval_list:
         return pd.DataFrame()
@@ -67,8 +79,8 @@ def transform_log_to_partially_ordered_variants(
     df: pd.DataFrame,
     case_id_col: str = DEFAULT_CASE_ID_KEY,
     activity_col: str = DEFAULT_ACTIVITY_KEY,
-    timestamp_col: str = DEFAULT_TIMESTAMP_KEY,
-    lifecycle_col: str = DEFAULT_LIFECYCLE_KEY,
+    ordering_col: str = DEFAULT_TIMESTAMP_KEY,
+    lifecycle_col: str or None = DEFAULT_LIFECYCLE_KEY,
     start_transition: str = "start",
     complete_transition: str = "complete",
     lifecycle_instance_col: str = DEFAULT_LIFECYCLE_INSTANCE_KEY
@@ -83,7 +95,7 @@ def transform_log_to_partially_ordered_variants(
 
 
     interval_df = generate_interval_df_fifo(
-        df, case_id_col, activity_col, timestamp_col, lifecycle_col,
+        df, case_id_col, activity_col, ordering_col, lifecycle_col,
         start_transition, complete_transition, lifecycle_instance_col
     )
 

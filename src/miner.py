@@ -1,6 +1,7 @@
 from src.combine_order import combine_orders
 from src.xor_miner import XORMiner
 from src.objects import XOR, simplified_model_to_powl
+from src.loop_miner import LoopMiner
 
 from pm4py.objects.powl.obj import SilentTransition
 
@@ -39,13 +40,16 @@ def __mine(orders):
 
     # mapping_self_loop = SelfLoopMiner.find_self_loops(orders)
     # orders = map_tansitions_to_submodels(orders, mapping_self_loop)
-    mapping_skips = SkipMiner.find_skips(orders)
-    orders = SkipMiner.apply_mapping(orders, mapping_skips)
+    # mapping_skips = SkipMiner.find_skips(orders)
+    # orders = SkipMiner.apply_mapping(orders, mapping_skips)
 
     order = combine_orders(orders)
 
     # for order in orders:
     # print(order.additional_information[VARIANT_FREQUENCY_KEY])
+
+    loop_mapping = LoopMiner.find_loops(order)
+    order = LoopMiner.apply_mapping(order, loop_mapping)
 
     return order
 

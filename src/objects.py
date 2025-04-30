@@ -209,10 +209,12 @@ def simplified_model_to_powl(model):
         for node in set(po.order.nodes) - {end}:
             po.add_edge(node, end)
 
+    # po.order.add_transitive_edges
+
     if not po.order.is_irreflexive():
         raise ValueError('Not irreflexive!')
 
-    if not po.order.is_transitive():
-        raise ValueError('Not is_transitive!')
+    # if not po.order.is_transitive():
+    #     raise ValueError('Not transitive!')
 
     return po

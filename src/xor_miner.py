@@ -5,7 +5,7 @@ from src.log_to_partial_orders import VARIANT_FREQUENCY_KEY
 from pm4py.algo.discovery.inductive.cuts import utils as cut_util
 
 
-class LabeledXORMiner:
+class XORMiner:
 
     @classmethod
     def find_disjoint_activities(cls, partial_orders):
@@ -89,16 +89,68 @@ class LabeledXORMiner:
                 res.append(new_graph)
         return res
 
+    # @classmethod
+    # def has_empty_traces(cls, partial_orders, cluster):
+    #     # res = StrictPartialOrder([Transition(a) for a in list(group)])
+    #     all_nodes = []
+    #     for group in cluster:
+    #         all_nodes = all_nodes + list(group)
+    #
+    #     for graph in partial_orders:
+    #         new_nodes = [n for n in graph.nodes if n.label in all_nodes]
+    #         if len(new_nodes) == 0:
+    #             return True
+    #
+    #     return False
     @classmethod
-    def has_empty_traces(cls, partial_orders, cluster):
-        # res = StrictPartialOrder([Transition(a) for a in list(group)])
-        all_nodes = []
-        for group in cluster:
-            all_nodes = all_nodes + list(group)
+    def apply_mapping(cls, orders, label_mapping):
+        res = []
 
-        for graph in partial_orders:
-            new_nodes = [n for n in graph.nodes if n.label in all_nodes]
-            if len(new_nodes) == 0:
-                return True
+        for graph in orders:
+            new_nodes = set()
+            for node in graph.nodes:
+                if node.label in label_mapping.keys():
+                    new_nodes.add(label_mapping[node.label])
+                else:
+                    new_nodes.add(node)
 
-        return False
+            edges_set = set()
+            for (s, t) in graph.edges:
+                XORMiner.__add_edge(s, t, label_mapping, edges_set)
+
+            for s in new_nodes:
+                for t in new_nodes:
+                    if (s, t) in edges_set and (t, s) in edges_set:
+                        edges_set.remove((s, t))
+                        edges_set.remove((t, s))
+
+            new_graph = Graph(frozenset(new_nodes), frozenset(edges_set),
+                              {VARIANT_FREQUENCY_KEY: graph.additional_information[VARIANT_FREQUENCY_KEY]})
+
+            found_po = False
+            # for other_graph in res:
+            #     if other_graph == new_graph:
+            #         other_graph.additional_information[VARIANT_FREQUENCY_KEY] = other_graph.additional_information[
+            #                                                                      VARIANT_FREQUENCY_KEY] + \
+            #                                                                  graph.additional_information[
+            #                                                                      VARIANT_FREQUENCY_KEY]
+            #         found_po = True
+            #         break
+
+            if not found_po:
+                res.append(new_graph)
+        return res
+
+    @classmethod
+    def __add_edge(cls, node, other_node, label_mapping, edges_set):
+        if node.label in label_mapping.keys():
+            source = label_mapping[node.label]
+        else:
+            source = node
+        if other_node.label in label_mapping.keys():
+            target = label_mapping[other_node.label]
+        else:
+            target = other_node
+        if source != target:
+            edges_set.add((source, target))
+

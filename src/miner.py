@@ -1,60 +1,10 @@
 from src.combine_order import combine_orders
-from src.labeled_xor_miner import LabeledXORMiner
-from src.objects import VARIANT_FREQUENCY_KEY, Graph, XOR, ActivityInstance, simplified_model_to_powl
+from src.xor_miner import XORMiner
+from src.objects import XOR, simplified_model_to_powl
 
 from pm4py.objects.powl.obj import SilentTransition
 
-
-def __add_edge(node, other_node, label_mapping, edges_set):
-    if node.label in label_mapping.keys():
-        source = label_mapping[node.label]
-    else:
-        source = node
-    if other_node.label in label_mapping.keys():
-        target = label_mapping[other_node.label]
-    else:
-        target = other_node
-    if source != target:
-        edges_set.add((source, target))
-
-
-def __map_transitions_to_submodels(orders, label_mapping):
-    res = []
-
-    for graph in orders:
-        new_nodes = set()
-        for node in graph.nodes:
-            if node.label not in label_mapping.keys():
-                new_nodes.add(node)
-            else:
-                new_nodes.add(label_mapping[node.label])
-
-        edges_set = set()
-        for (s, t) in graph.edges:
-            __add_edge(s, t, label_mapping, edges_set)
-
-        for s in new_nodes:
-            for t in new_nodes:
-                if (s, t) in edges_set and (t, s) in edges_set:
-                    edges_set.remove((s, t))
-                    edges_set.remove((t, s))
-
-        new_graph = Graph(frozenset(new_nodes), frozenset(edges_set),
-                          {VARIANT_FREQUENCY_KEY: graph.additional_information[VARIANT_FREQUENCY_KEY]})
-
-        found_po = False
-        # for other_graph in res:
-        #     if other_graph == new_graph:
-        #         other_graph.additional_information[VARIANT_FREQUENCY_KEY] = other_graph.additional_information[
-        #                                                                      VARIANT_FREQUENCY_KEY] + \
-        #                                                                  graph.additional_information[
-        #                                                                      VARIANT_FREQUENCY_KEY]
-        #         found_po = True
-        #         break
-
-        if not found_po:
-            res.append(new_graph)
-    return res
+from src.skip_miner import SkipMiner
 
 
 def __mine(orders):
@@ -64,25 +14,36 @@ def __mine(orders):
         elif len(orders[0].nodes) == 1:
             return list(orders[0].nodes)[0]
 
-    xor_clusters = LabeledXORMiner.find_disjoint_activities(orders)
+    xor_clusters = XORMiner.find_disjoint_activities(orders)
+
+    label_mapping = {}
     if xor_clusters is not None:
-        label_mapping = {}
+
         for cluster in xor_clusters:
 
             sub_models = []
-            if LabeledXORMiner.has_empty_traces(orders, cluster):
-                sub_models.append(ActivityInstance(None, 1))
+            # if LabeledXORMiner.has_empty_traces(orders, cluster):
+            #     sub_models.append(ActivityInstance(None, 1))
             for group in cluster:
-                projected_log = LabeledXORMiner.project_partial_orders_on_groups(orders, list(group))
+                projected_log = XORMiner.project_partial_orders_on_groups(orders, list(group))
                 sub_models.append(__mine(projected_log))
             model = XOR(children=frozenset(sub_models))
             for group in cluster:
                 for activity_label in group:
+                    if activity_label in label_mapping.keys():
+                        raise ValueError("Duplicate activity label")
                     label_mapping[activity_label] = model
-        orders = __map_transitions_to_submodels(orders, label_mapping)
+
+    orders = XORMiner.apply_mapping(orders, label_mapping)
+
+
     # mapping_self_loop = SelfLoopMiner.find_self_loops(orders)
     # orders = map_tansitions_to_submodels(orders, mapping_self_loop)
+    mapping_skips = SkipMiner.find_skips(orders)
+    orders = SkipMiner.apply_mapping(orders, mapping_skips)
+
     order = combine_orders(orders)
+
     # for order in orders:
     # print(order.additional_information[VARIANT_FREQUENCY_KEY])
 

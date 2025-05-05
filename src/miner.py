@@ -1,4 +1,5 @@
 from src.combine_order import combine_orders
+from src.loop_miner_scc import LoopMinerBetween
 from src.xor_miner import XORMiner
 from src.objects import XOR, simplified_model_to_powl
 from src.loop_miner import LoopMiner
@@ -48,8 +49,18 @@ def __mine(orders):
     else:
         raise ValueError("Input list of partial orders is empty!")
 
-    loop_mapping = LoopMiner.find_loops(order)
-    order = LoopMiner.apply_mapping(order, loop_mapping)
+    loop_mapping, loops_frequencies = LoopMiner.find_loops(order)
+    print(loop_mapping)
+    order = LoopMiner.apply_mapping(order, loop_mapping, loops_frequencies)
+
+    # build a trivial mapping: everything not in a loop stays itself
+    # mapping = {n: n for n in order.nodes}
+    # for loop_node in loops:
+    #     for inst in loop_node.body.nodes:
+    #         mapping[inst] = loop_node
+
+    # apply and collapse
+    # order = LoopMinerSCCVariant.apply_mapping(order, mapping, loops_freq)
 
     if len(order.nodes) == 0:
         return SilentTransition()

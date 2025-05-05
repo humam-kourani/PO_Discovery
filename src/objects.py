@@ -167,11 +167,15 @@ class Graph:
             return NotImplemented
 
 
-def simplified_model_to_powl(model):
+def simplified_model_to_powl(model, add_instance_number = False):
     if isinstance(model, ActivityInstance):
         if not model.label:
             return SilentTransition()
-        return Transition(label=model.label)
+        if add_instance_number:
+            label = f"({model.label}, {model.number})"
+        else:
+            label = model.label
+        return Transition(label=label)
     elif isinstance(model, XOR):
         return OperatorPOWL(operator=Operator.XOR, children=[simplified_model_to_powl(child) for child in model.children])
     elif isinstance(model, LOOP):
@@ -214,7 +218,7 @@ def simplified_model_to_powl(model):
     if not po.order.is_irreflexive():
         raise ValueError('Not irreflexive!')
 
-    # if not po.order.is_transitive():
-    #     raise ValueError('Not transitive!')
+    if not po.order.is_transitive():
+        raise ValueError('Not transitive!')
 
     return po

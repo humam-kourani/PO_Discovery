@@ -5,8 +5,8 @@ from src.log_to_partial_orders import transform_log_to_partially_ordered_variant
 from src.miner import mine_powl_from_partial_orders
 
 if __name__ == "__main__":
-    # log = pm4py.read_xes(r"C:\Users\kourani\OneDrive - Fraunhofer\FIT\powl_ev\Unfiltered XES Logs\BPI_Challenge_2012.xes.gz", variant="rustxes")
-    log = pm4py.read_xes(r"C:\Users\kourani\Downloads\example-logs\example-logs\repairExample.xes", variant="rustxes")
+    log = pm4py.read_xes(r"C:\Users\kourani\OneDrive - Fraunhofer\FIT\powl_ev\Unfiltered XES Logs\BPI_Challenge_2012.xes.gz", variant="rustxes")
+    # log = pm4py.read_xes(r"C:\Users\kourani\Downloads\example-logs\example-logs\repairExample.xes", variant="rustxes")
 
     # print(log)
     # log = pm4py.read_xes("test_logs/interval_event_log_with_LC - skip make delivery and multiple payment.xes", variant="rustxes")
@@ -38,6 +38,7 @@ if __name__ == "__main__":
         print("🔧 Task started...")
         powl = mine_powl_from_partial_orders(partial_orders)
         local_powl_visualizer.view(powl)
+        # pm4py.view_powl(powl, format="SVG")
         # Simulates a task that takes 35 seconds
         print("✅ Done Visualizing!")
         end_time = datetime.datetime.now()

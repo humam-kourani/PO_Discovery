@@ -1,8 +1,27 @@
+from typing import Set
+
 import networkx as nx
 
-from src.objects import Graph
+from src.objects import Graph, ActivityInstance, XOR, LOOP
 from src.log_to_partial_orders import VARIANT_FREQUENCY_KEY
 from pm4py.algo.discovery.inductive.cuts import utils as cut_util
+
+
+def get_activity(node) -> Set[str]:
+    if isinstance(node, ActivityInstance):
+        return {node.label} if node.label else set()
+    if isinstance(node, Graph):
+        children = node.nodes
+    elif isinstance(node, XOR):
+        children = node.children
+    elif isinstance(node, LOOP):
+        children = [node.body, node.redo]
+    else:
+        raise TypeError
+    res = set()
+    for child in children:
+        res.update(get_activity(child))
+    return res
 
 
 class XORMiner:
@@ -17,13 +36,16 @@ class XORMiner:
         :return: Groups of disjoint activities.
         """
 
-        all_activity_labels = sorted(
-            set(activity.label for graph in partial_orders for activity in graph.nodes))
+        all_activity_labels = set()
+        for graph in partial_orders:
+            for node in graph.nodes:
+                all_activity_labels.update(get_activity(node))
 
+        all_activity_labels = sorted(all_activity_labels)
         adjacency = {activity: {other_activity: 0 for other_activity in all_activity_labels} for activity in all_activity_labels}
 
         for graph in partial_orders:
-            activity_labels_in_trace = [node.label for node in graph.nodes]
+            activity_labels_in_trace = get_activity(graph)
             for i, activity in enumerate(activity_labels_in_trace):
                 for j, other_activity in enumerate(activity_labels_in_trace):
                     if i != j:
@@ -73,7 +95,7 @@ class XORMiner:
     def project_partial_orders_on_groups(cls, partial_orders, group):
         res = []
         for graph in partial_orders:
-            new_nodes = frozenset([n for n in graph.nodes if n.label in group])
+            new_nodes = frozenset([n for n in graph.nodes if get_activity(n).issubset(group)])
             if len(new_nodes) == 0:
                 continue
             new_edges = frozenset([(s, t) for (s, t) in graph.edges if s in new_nodes and t in new_nodes])
@@ -109,7 +131,8 @@ class XORMiner:
         for graph in orders:
             new_nodes = set()
             for node in graph.nodes:
-                if node.label in label_mapping.keys():
+                label = get_activity(node).pop()
+                if label in label_mapping.keys():
                     new_nodes.add(label_mapping[node.label])
                 else:
                     new_nodes.add(node)
@@ -143,12 +166,14 @@ class XORMiner:
 
     @classmethod
     def __add_edge(cls, node, other_node, label_mapping, edges_set):
-        if node.label in label_mapping.keys():
-            source = label_mapping[node.label]
+        label = get_activity(node).pop()
+        if label in label_mapping.keys():
+            source = label_mapping[label]
         else:
             source = node
-        if other_node.label in label_mapping.keys():
-            target = label_mapping[other_node.label]
+        other_labels = get_activity(other_node)
+        if other_labels.issubset(label_mapping.keys()):
+            target = label_mapping[other_labels.pop()]
         else:
             target = other_node
         if source != target:

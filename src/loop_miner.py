@@ -1,8 +1,11 @@
 from collections import defaultdict, deque
+
+from src.combine_order import combine_orders
 from src.objects import LOOP, ActivityInstance, Graph, VARIANT_FREQUENCY_KEY
 
 
-MULTIPLE_LOOPS = True
+MULTIPLE_LOOPS = False
+LOOP_THRESHOLD = 0.9
 
 
 class LoopMiner:
@@ -46,6 +49,7 @@ class LoopMiner:
         loops = set()
         loops_frequencies = defaultdict(int)
         loop_groups = []
+        label_group_to_loop_map = defaultdict(set)
 
         # 5) Process labels in order
         for label in ordered_labels:
@@ -63,7 +67,7 @@ class LoopMiner:
 
                 first, last = insts_sorted[i], insts_sorted[i+1]
 
-                if MULTIPLE_LOOPS:
+                if MULTIPLE_LOOPS or True:
                     if first in processed_nodes:
                         continue
 
@@ -93,17 +97,21 @@ class LoopMiner:
                 new_label_group = {n.label for n in do_set}
                 loop_groups.append(new_label_group)
 
-                if MULTIPLE_LOOPS:
+                if MULTIPLE_LOOPS or True:
 
-                    # new_nodes_map = {n: ActivityInstance(n.label, 1) for n in do_set}
+                    new_nodes_map = {}
+                    label_counter = defaultdict(int)
+                    for n in do_set:
+                        label_counter[n.label] += 1
+                        new_nodes_map[n] = ActivityInstance(n.label, label_counter[n.label])
 
-                    if len(do_set) == 1:
-                        do_part = list(do_set)[0]
+                    if len(do_set) == 1 and False:
+                        do_part = new_nodes_map[list(do_set)[0]]
                     else:
-                        new_edges = {(s, t) for (s, t) in graph.edges if
+                        new_edges = {(new_nodes_map[s], new_nodes_map[t]) for (s, t) in graph.edges if
                                      s in do_set and t in do_set}
                         do_part = Graph(
-                            nodes=frozenset(do_set),
+                            nodes=frozenset(new_nodes_map.values()),
                             edges=frozenset(new_edges),
                             # additional_information={VARIANT_FREQUENCY_KEY:
                             #                             graph.additional_information.get(VARIANT_FREQUENCY_KEY, 1)}
@@ -132,6 +140,7 @@ class LoopMiner:
                         loops.add(loop_node)
 
                     loops_frequencies[loop_node] += 1
+                    label_group_to_loop_map[frozenset(new_label_group)].add(do_part)
 
                     for n in do_set:
                         processed_nodes.add(n)
@@ -153,53 +162,73 @@ class LoopMiner:
                     merged.append(set(label_group))
             print(f"Loop labels merged: {merged}")
             changed = True
+            new_group_to_orders_mapping = {}
             while changed:
                 changed = False
                 new_merged = []
+
                 while merged:
                     grp = merged.pop()
+                    grp_orders = label_group_to_loop_map[frozenset(grp)]
                     for other in merged:
                         if grp & other:
                             merged.remove(other)
                             grp |= other
+                            grp_orders |= label_group_to_loop_map[frozenset(other)]
                             changed = True
                             break
+                    for order in grp_orders:
+                        old_nodes = set(order.nodes)
+                        for label in grp:
+                            node = ActivityInstance(label, 1)
+                            old_nodes.add(node)
+                        order.nodes = frozenset(old_nodes)
                     new_merged.append(grp)
+                    new_group_to_orders_mapping[frozenset(grp)] = grp_orders
                 merged = new_merged
             print(f"Loop labels merged new: {merged}")
 
             # 5) build one LOOP per merged group
             mapping = {}
-            for group in merged:
-                new_nodes = {ActivityInstance(n, 1) for n in group}
 
-                # for source in new_nodes:
-                #     for target in new_nodes:
-                #         if source != target and all(
-                #                 (s, t) in graph.edges for s in reverse_mapping[source] for t in reverse_mapping[target]):
-                #             new_edges.add((source, target))
+            if True:
+                for group in merged:
+                    print(new_group_to_orders_mapping[frozenset(group)])
+                    merged_order = combine_orders(new_group_to_orders_mapping[frozenset(group)])
+                    print("COMBINED INTO: ", new_group_to_orders_mapping[frozenset(group)])
+                    for n in group:
+                        mapping[n] = merged_order
+            if False:
+                for group in merged:
+                    new_nodes = {ActivityInstance(n, 1) for n in group}
 
-                # sub-graph for the do-part
-                # sub_edges = {
-                #     (s, t)
-                #     for (s, t) in graph.edges
-                #     if s in group and t in group
-                # }
+                    # for source in new_nodes:
+                    #     for target in new_nodes:
+                    #         if source != target and all(
+                    #                 (s, t) in graph.edges for s in reverse_mapping[source] for t in reverse_mapping[target]):
+                    #             new_edges.add((source, target))
+
+                    # sub-graph for the do-part
+                    # sub_edges = {
+                    #     (s, t)
+                    #     for (s, t) in graph.edges
+                    #     if s in group and t in group
+                    # }
 
 
-                if len(new_nodes) == 1:
-                    do_part = new_nodes.pop()
-                else:
-                    do_part = Graph(
-                        nodes=frozenset(new_nodes),
-                        edges=frozenset([]),
-                        # additional_information={VARIANT_FREQUENCY_KEY:
-                        #                             graph.additional_information.get(VARIANT_FREQUENCY_KEY, 1)}
-                    )
-                loop_node = LOOP(body=do_part, redo=ActivityInstance(None, 1))
-                # map every node in the group to this loop
-                for n in group:
-                    mapping[n] = loop_node
+                    if len(new_nodes) == 1:
+                        do_part = new_nodes.pop()
+                    else:
+                        do_part = Graph(
+                            nodes=frozenset(new_nodes),
+                            edges=frozenset([]),
+                            # additional_information={VARIANT_FREQUENCY_KEY:
+                            #                             graph.additional_information.get(VARIANT_FREQUENCY_KEY, 1)}
+                        )
+                    loop_node = LOOP(body=do_part, redo=ActivityInstance(None, 1))
+                    # map every node in the group to this loop
+                    for n in group:
+                        mapping[n] = loop_node
 
             # # Build redo submodel
             # if len(redo_nodes) == 1:

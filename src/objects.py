@@ -1,5 +1,6 @@
 from pm4py.objects.powl.obj import StrictPartialOrder, Transition, OperatorPOWL, SilentTransition
 from pm4py.objects.process_tree.obj import Operator
+from unicodedata import normalize
 
 VARIANT_FREQUENCY_KEY = "@@variant_frequency"
 ENABLE_DUPLICATION = True
@@ -40,6 +41,10 @@ class XOR:
         else:
             return NotImplemented
 
+    def normalize(self):
+        normalized_children = {child.normalize() for child in self.children}
+        return XOR(frozenset(normalized_children))
+
 
 class LOOP:
     def __init__(self, body, redo):
@@ -74,6 +79,10 @@ class LOOP:
         else:
             return NotImplemented
 
+    def normalize(self):
+        normalized_body = self.body.normalize()
+        normalized_redo = self.redo.normalize()
+        return LOOP(normalized_body, normalized_redo)
 
 
 class ActivityInstance:
@@ -117,6 +126,9 @@ class ActivityInstance:
             return True
         else:
             return NotImplemented
+
+    def normalize(self):
+        return ActivityInstance(self.label, 1)
 
 
 class Graph:
@@ -165,6 +177,11 @@ class Graph:
             return False
         else:
             return NotImplemented
+
+    def normalize(self):
+        normalized_children_mapping = {node: node.normalize() for node in self.nodes}
+        from src.mapping import apply_node_mapping_on_single_graph
+        return apply_node_mapping_on_single_graph(self, normalized_children_mapping)
 
 
 def simplified_model_to_powl(model, add_instance_number = False):

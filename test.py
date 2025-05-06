@@ -1,14 +1,15 @@
 import pm4py
 
+from src import local_powl_visualizer
 from src.log_to_partial_orders import transform_log_to_partially_ordered_variants
 from src.miner import mine_powl_from_partial_orders
 
 if __name__ == "__main__":
-    log = pm4py.read_xes(r"C:\Users\kourani\OneDrive - Fraunhofer\FIT\powl_ev\Unfiltered XES Logs\BPI_Challenge_2012.xes.gz", variant="rustxes")
-    # log = pm4py.read_xes(r"C:\Users\kourani\Downloads\example-logs\example-logs\repairExample.xes", variant="rustxes")
+    # log = pm4py.read_xes(r"C:\Users\kourani\OneDrive - Fraunhofer\FIT\powl_ev\Unfiltered XES Logs\BPI_Challenge_2012.xes.gz", variant="rustxes")
+    log = pm4py.read_xes(r"C:\Users\kourani\Downloads\example-logs\example-logs\repairExample.xes", variant="rustxes")
 
     # print(log)
-    # log = pm4py.read_xes("test_logs/interval_event_log_with_LC - skip make delivery and multiple or zero payment.xes", variant="rustxes")
+    # log = pm4py.read_xes("test_logs/interval_event_log_with_LC - skip make delivery and multiple payment.xes", variant="rustxes")
     # print(log['lifecycle:transition'])
     # print(len(log))
     # complete_log = log[log['lifecycle:transition'].isin(["complete", "COMPLETE"])]
@@ -36,7 +37,7 @@ if __name__ == "__main__":
     def long_task():
         print("🔧 Task started...")
         powl = mine_powl_from_partial_orders(partial_orders)
-        pm4py.view_powl(powl, format='svg')
+        local_powl_visualizer.view(powl)
         # Simulates a task that takes 35 seconds
         print("✅ Done Visualizing!")
         end_time = datetime.datetime.now()

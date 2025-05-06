@@ -6,6 +6,7 @@ import tempfile
 import webbrowser
 from enum import Enum
 
+import pm4py
 from graphviz import Digraph
 from pm4py.objects.process_tree.obj import Operator
 from pm4py.util import exec_utils, constants
@@ -93,12 +94,14 @@ def get_id_base(powl):
     if isinstance(powl, Transition):
         return str(id(powl))
     if isinstance(powl, OperatorPOWL):
+        # return str(id(powl))
         for node in powl.children:
             if not isinstance(node, SilentTransition):
                 return get_id_base(node)
     if isinstance(powl, StrictPartialOrder):
         for node in powl.children:
             return get_id_base(node)
+
 
 
 def get_id(powl):
@@ -182,16 +185,17 @@ def repr_powl(powl, viz, color_map, level, skip_order=False, block_id=None):
         with viz.subgraph(name=block_id) as block:
             block.attr(margin="20,20")
             block.attr(style="filled")
+            block.attr(label="")
             block.attr(fillcolor=current_color)
             if skip_order:
                 with importlib.resources.path("pm4py.visualization.powl.variants.icons", "skip-tag.svg") as gimg:
                     image = str(gimg)
-                    print(image)
-
                     block.attr(label=f'''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
                                             <TR><TD WIDTH="55" HEIGHT="27" FIXEDSIZE="TRUE"><IMG SRC="{image}" SCALE="BOTH"/></TD></TR>
                                             </TABLE>>''')
                     block.attr(labeljust='r')
+            else:
+                block.attr(label="")
 
             for child in powl.children:
                 repr_powl(child, block, color_map, level=level + 1)
@@ -201,10 +205,10 @@ def repr_powl(powl, viz, color_map, level, skip_order=False, block_id=None):
                         add_order_edge(block, child, child2)
 
     elif isinstance(powl, OperatorPOWL):
+        block_id = get_id(powl)
         if powl.operator == Operator.XOR and len(powl.children) == 2:
             child_0 = powl.children[0]
             child_1 = powl.children[1]
-            block_id = get_id(powl)
             if isinstance(child_0, SilentTransition) and isinstance(child_1, StrictPartialOrder):
                 repr_powl(child_1, viz, color_map, level=level, skip_order=True, block_id=block_id)
                 return

@@ -1,5 +1,5 @@
 from collections import defaultdict
-from src.objects import Graph, LOOP, ActivityInstance, XOR, Skip
+from src.objects import Graph, Skip, SelfLoop, SkipSelfLoop
 
 
 def find_self_loops(mapping, new_nodes_counter):
@@ -9,30 +9,66 @@ def find_self_loops(mapping, new_nodes_counter):
     for key, value in mapping.items():
         reversed_mapping[value].add(key)
 
-    skips = {skip for skip in reversed_mapping.keys() if isinstance(skip, Skip)}
+    # skips = set()
+    # self_loops = set()
+    # skip_self_loops = set()
+    tagged_node_element_map = defaultdict(list)
+
+    for node in reversed_mapping.keys():
+        if isinstance(node, Skip):
+            pass
+            # skips.add(node)
+        elif isinstance(node, SelfLoop):
+            pass
+            # self_loops.add(node)
+        elif isinstance(node, SkipSelfLoop):
+            pass
+            # skip_self_loops.add(node)
+        else:
+            continue
+        tagged_node_element_map[node.element].append(node)
+
+    # tagged_nodes = skips | self_loops | skip_self_loops
 
     processed_keys = set()
+    print(f"reversed_mapping: {reversed_mapping}")
 
-    for skip in skips:
-        skip_element = skip.element
+    for tagged_node_element in tagged_node_element_map.keys():
 
-        if skip_element in reversed_mapping.keys():
-            new_node = LOOP(body=skip_element, redo=ActivityInstance(label=None, number=1))
-            value_1 = reversed_mapping[skip_element]
-            value_2 = reversed_mapping[skip]
-            for node in value_1 | value_2:
+        element_list = tagged_node_element_map[tagged_node_element]
+
+        if tagged_node_element in reversed_mapping.keys():
+            new_node = SelfLoop(tagged_node_element)
+            values = reversed_mapping[tagged_node_element]
+            processed_keys.add(tagged_node_element)
+            for tagged_node in element_list:
+                values.update(reversed_mapping[tagged_node])
+                processed_keys.add(tagged_node)
+            for node in values:
                 new_mapping[node] = new_node
-            processed_keys.update({skip, skip_element})
+
+        elif len(element_list) > 1:
+            if any(isinstance(tagged_node, SelfLoop) for tagged_node in element_list):
+                new_node = SelfLoop(tagged_node_element)
+            else:
+                new_node = SkipSelfLoop(tagged_node_element)
+
+            values = set()
+            for tagged_node in element_list:
+                values.update(reversed_mapping[tagged_node])
+                processed_keys.add(tagged_node)
+
+            for node in values:
+                new_mapping[node] = new_node
 
     for key, value in reversed_mapping.items():
         if key in processed_keys:
             continue
-        print(value)
         if new_nodes_counter[key] > 1:
             if isinstance(key, Skip):
-                new_node = LOOP(body=ActivityInstance(label=None, number=1), redo=key.element)
+                new_node = SkipSelfLoop(key.element)
             else:
-                new_node = LOOP(body=key, redo=ActivityInstance(label=None, number=1))
+                new_node = SelfLoop(key)
             # if isinstance(key, XOR):
             #     for child in key.children:
             #         if isinstance(child, ActivityInstance) and not child.label:
@@ -79,8 +115,3 @@ def apply_node_mapping_on_single_graph(graph: Graph, node_mapping: dict):
         edges=frozenset(new_edges),
         additional_information=graph.additional_information
     )
-
-
-def apply_node_mapping(graphs, node_mapping: dict, new_nodes_counter: dict):
-    node_mapping = find_self_loops(node_mapping, new_nodes_counter)
-    return [apply_node_mapping_on_single_graph(g, node_mapping) for g in graphs]

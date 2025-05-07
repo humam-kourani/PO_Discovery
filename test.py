@@ -1,21 +1,23 @@
 import pm4py
 
 from src import local_powl_visualizer
-from src.log_to_partial_orders import transform_log_to_partially_ordered_variants
+from src.log_to_partial_orders import transform_log_to_partially_ordered_variants, DEFAULT_LIFECYCLE_KEY
 from src.miner import mine_powl_from_partial_orders
 
 if __name__ == "__main__":
-    # log = pm4py.read_xes(r"C:\Users\kourani\OneDrive - Fraunhofer\FIT\powl_ev\Unfiltered XES Logs\BPI_Challenge_2012.xes.gz", variant="rustxes")
-    # log = pm4py.read_xes(r"C:\Users\kourani\Downloads\example-logs\example-logs\repairExample.xes", variant="rustxes")
+    log = pm4py.read_xes(r"C:\Users\kourani\OneDrive - Fraunhofer\FIT\powl_ev\Unfiltered XES Logs\BPI_Challenge_2012.xes.gz", variant="rustxes")
 
-    # print(log)
-    log = pm4py.read_xes("test_logs/interval_event_log_with_LC - skip make delivery and multiple or zero payment.xes", variant="rustxes")
+    # log = pm4py.read_xes(r"C:\Users\kourani\Downloads\example-logs\example-logs\repairExample.xes", variant="rustxes")
+    # log = pm4py.read_xes("test_logs/interval_event_log_with_LC - empty traces in xor.xes", variant="rustxes")
     # print(log['lifecycle:transition'])
     # print(len(log))
     # complete_log = log[log['lifecycle:transition'].isin(["complete", "COMPLETE"])]
     # print(len(complete_log))
     # start_log = log[log['lifecycle:transition'].isin(["start", "START"])]
     # print(len(start_log))
+
+    complete_log = log[log[DEFAULT_LIFECYCLE_KEY].isin(["complete", "Complete", "COMPLETE"])]
+
     import datetime
     start_time = datetime.datetime.now()
     partial_orders = transform_log_to_partially_ordered_variants(log)
@@ -36,8 +38,17 @@ if __name__ == "__main__":
     # Simulate a long-running function
     def long_task():
         print("🔧 Task started...")
+        mining_start_time = datetime.datetime.now()
         powl = mine_powl_from_partial_orders(partial_orders)
+        mining_end_time = datetime.datetime.now()
+        print(f"Mining time: {mining_end_time - mining_start_time}")
         local_powl_visualizer.view(powl)
+
+        pn, im, fm = pm4py.convert_to_petri_net(powl)
+        fitness_footprints = pm4py.fitness_footprints(complete_log, pn, im, fm)
+        print(f"Fitness footprints: {fitness_footprints}")
+        fitness_alignments = pm4py.fitness_alignments(complete_log, pn, im, fm)
+        print(f"Fitness alignments: {fitness_alignments}")
         # pm4py.view_powl(powl, format="SVG")
         # Simulates a task that takes 35 seconds
         print("✅ Done Visualizing!")

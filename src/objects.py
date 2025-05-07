@@ -1,6 +1,5 @@
 from pm4py.objects.powl.obj import StrictPartialOrder, Transition, OperatorPOWL, SilentTransition
 from pm4py.objects.process_tree.obj import Operator
-from unicodedata import normalize
 
 VARIANT_FREQUENCY_KEY = "@@variant_frequency"
 ENABLE_DUPLICATION = True
@@ -40,18 +39,35 @@ class XOR:
         else:
             return NotImplemented
 
-    def normalize(self):
-        normalized_children = {child.normalize() for child in self.children}
-        return XOR(frozenset(normalized_children))
+    # def normalize(self):
+    #     normalized_children = {child.normalize() for child in self.children}
+    #     return XOR(frozenset(normalized_children))
 
 class Skip(XOR):
+    _allow_init = False
+
     def __init__(self, element):
+        if not Skip._allow_init:
+            raise RuntimeError("You must use create() to create this object!")
         super().__init__(frozenset([element, ActivityInstance(None, 1)]))
         self.element = element
 
-    def normalize(self):
-        normalized_element = self.element.normalize()
-        return Skip(normalized_element)
+    @classmethod
+    def create(cls, element):
+        if isinstance(element, Skip) or isinstance(element, SkipSelfLoop):
+            instance = element
+        elif isinstance(element, SelfLoop):
+            return SkipSelfLoop(element.element)
+        else:
+            cls._allow_init = True
+            instance = cls(element)
+            cls._allow_init = False
+
+        return instance
+
+    # def normalize(self):
+    #     normalized_element = self.element.normalize()
+    #     return Skip(normalized_element)
 
 class LOOP:
     def __init__(self, body, redo):
@@ -86,10 +102,31 @@ class LOOP:
         else:
             return NotImplemented
 
-    def normalize(self):
-        normalized_body = self.body.normalize()
-        normalized_redo = self.redo.normalize()
-        return LOOP(normalized_body, normalized_redo)
+    # def normalize(self):
+    #     normalized_body = self.body.normalize()
+    #     normalized_redo = self.redo.normalize()
+    #     return LOOP(normalized_body, normalized_redo)
+
+class SelfLoop(LOOP):
+    def __init__(self, element):
+        if isinstance(element, SelfLoop):
+            element = element.element
+            super().__init__(element, ActivityInstance(None, 1))
+        elif isinstance(element, Skip) or isinstance(element, SkipSelfLoop):
+            self.__class__ = SkipSelfLoop
+            element = element.element
+            super().__init__(ActivityInstance(None, 1), element)
+        else:
+            super().__init__(element, ActivityInstance(None, 1))
+        self.element = element
+
+
+class SkipSelfLoop(LOOP):
+    def __init__(self, element):
+        if isinstance(element, SkipSelfLoop) or isinstance(element, SelfLoop) or isinstance(element, Skip):
+            element = element.element
+        super().__init__(ActivityInstance(None, 1), element)
+        self.element = element
 
 
 class ActivityInstance:
@@ -134,8 +171,8 @@ class ActivityInstance:
         else:
             return NotImplemented
 
-    def normalize(self):
-        return ActivityInstance(self.label, 1)
+    # def normalize(self):
+    #     return ActivityInstance(self.label, 1)
 
 
 class Graph:
@@ -185,10 +222,12 @@ class Graph:
         else:
             return NotImplemented
 
-    def normalize(self):
-        normalized_children_mapping = {node: node.normalize() for node in self.nodes}
-        from src.mapping import apply_node_mapping_on_single_graph
-        return apply_node_mapping_on_single_graph(self, normalized_children_mapping)
+    # def normalize(self):
+    #     normalized_children_mapping = {node: node.normalize() for node in self.nodes}
+    #     if len(set(normalized_children_mapping.values())) != len(self.nodes):
+    #         raise ValueError("Normalization is not possible!")
+    #     from src.mapping import apply_node_mapping_on_single_graph
+    #     return apply_node_mapping_on_single_graph(self, normalized_children_mapping)
 
 
 def simplified_model_to_powl(model, add_instance_number = False):

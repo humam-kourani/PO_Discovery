@@ -1,0 +1,3 @@
+TURBO = True
+LOOP_MINING = True
+XOR_MINING = True

@@ -27,19 +27,15 @@ def get_activity(node) -> Set[str]:
 class XORMiner:
 
     @classmethod
-    def find_disjoint_activities(cls, partial_orders):
+    def find_disjoint_activities(cls, partial_orders, all_activity_labels):
 
         """
         Finds activities that never occur together in the same partial order.
 
+        :param all_activity_labels:
         :param partial_orders: List of partial orders.
         :return: Groups of disjoint activities.
         """
-
-        all_activity_labels = set()
-        for graph in partial_orders:
-            for node in graph.nodes:
-                all_activity_labels.update(get_activity(node))
 
         all_activity_labels = sorted(all_activity_labels)
         adjacency = {activity: {other_activity: 0 for other_activity in all_activity_labels} for activity in all_activity_labels}
@@ -147,8 +143,7 @@ class XORMiner:
                         edges_set.remove((s, t))
                         edges_set.remove((t, s))
 
-            new_graph = Graph(frozenset(new_nodes), frozenset(edges_set),
-                              {VARIANT_FREQUENCY_KEY: graph.additional_information[VARIANT_FREQUENCY_KEY]})
+            new_graph = Graph(frozenset(new_nodes), frozenset(edges_set), graph.additional_information)
 
             found_po = False
             # for other_graph in res:

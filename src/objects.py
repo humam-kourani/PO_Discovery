@@ -5,7 +5,6 @@ from unicodedata import normalize
 VARIANT_FREQUENCY_KEY = "@@variant_frequency"
 ENABLE_DUPLICATION = True
 
-
 class XOR:
     def __init__(self, children: frozenset):
         """
@@ -45,6 +44,14 @@ class XOR:
         normalized_children = {child.normalize() for child in self.children}
         return XOR(frozenset(normalized_children))
 
+class Skip(XOR):
+    def __init__(self, element):
+        super().__init__(frozenset([element, ActivityInstance(None, 1)]))
+        self.element = element
+
+    def normalize(self):
+        normalized_element = self.element.normalize()
+        return Skip(normalized_element)
 
 class LOOP:
     def __init__(self, body, redo):

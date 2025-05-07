@@ -1,5 +1,5 @@
 from collections import defaultdict
-from src.objects import XOR, ActivityInstance, Graph, VARIANT_FREQUENCY_KEY
+from src.objects import XOR, ActivityInstance, Graph, VARIANT_FREQUENCY_KEY, Skip, LOOP
 
 
 class SkipMiner:
@@ -37,7 +37,7 @@ class SkipMiner:
                     number_supersets = number_supersets + 1
                     last_superset = key
                     # break
-            if number_supersets == 1 and False:
+            if number_supersets == 1:
                 graph_ids_lists_to_nodes[last_superset].append(node_id)
             else:
                 # if number_supersets > 1:
@@ -46,14 +46,14 @@ class SkipMiner:
 
 
         res_dict = {}
-
+        new_nodes_counter = defaultdict(int)
         for graph_id_list, node_id_list in graph_ids_lists_to_nodes.items():
             if len(graph_id_list) == n:
                 for node_id in node_id_list:
                     node = all_nodes[node_id]
-                    res_dict[node] = node
+                    if node not in res_dict.keys():
+                        res_dict[node] = node
             else:
-                child_1 = ActivityInstance(None, 1)
 
                 all_projections = []
                 for graph_id in graph_id_list:
@@ -65,14 +65,31 @@ class SkipMiner:
                                        {VARIANT_FREQUENCY_KEY: graph.additional_information[VARIANT_FREQUENCY_KEY]})
                     all_projections.append(projection)
                 from src.miner import _mine
-                print(f"LEN PROJ: {len(all_projections)}")
-                new_graph = _mine(all_projections)
-                xor = XOR(frozenset([new_graph, child_1]))
+                new_graph = _mine(all_projections).normalize()
+                # xor = XOR(frozenset([new_graph, child_1]))
+                # new_graph.min_count = 0
+
+                remaining_nodes = [node for i, node in enumerate(all_nodes) if i not in node_id_list]
+                remaining_proj_edges = set()
+                for s in remaining_nodes:
+                    for t in remaining_nodes:
+                        if not any((t, s) in graph.edges for graph in partial_orders):
+                            remaining_proj_edges.add((s,t))
+                projection = Graph(frozenset(remaining_nodes),
+                                   frozenset(remaining_proj_edges))
+                if new_graph == projection.normalize():
+                    new_node = LOOP(body=new_graph, redo=ActivityInstance(None, 1))
+                    for node in remaining_nodes:
+                        res_dict[node] = new_node
+                else:
+                    xor = Skip(new_graph)
+                    new_node = xor
+
+
                 for node_id in node_id_list:
                     node = all_nodes[node_id]
-                    res_dict[node] = xor
-
-
+                    res_dict[node] = new_node
+                new_nodes_counter[new_node] += 1
 
             # can_be_skipped = not all(current_node in graph.nodes for graph in partial_orders)
             # loop = False
@@ -94,5 +111,5 @@ class SkipMiner:
             # else:
             #     res_dict[current_node] = current_node
 
-        return res_dict
+        return res_dict, new_nodes_counter
 

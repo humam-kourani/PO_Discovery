@@ -21,13 +21,29 @@ class SelfLoopMiner:
         print(f"len new nodes: {len(reversed_mapping.keys())}")
 
         print("reversed_mapping: ", reversed_mapping)
+        loop_keys = {}
         for key, value in reversed_mapping.items():
             if len(value) > 1:
                 new_node = LOOP(body=key, redo=ActivityInstance(label=None, number=1))
+                print("new_node: ", new_node)
+                loop_keys[key] = new_node
             else:
                 new_node = key
             for node in value:
                 node_mapping[node] = new_node
+
+        for key, value in reversed_mapping.items():
+            if isinstance(key, XOR) and len(key.children) == 2:
+                child_0 = list(key.children)[0]
+                child_1 = list(key.children)[1]
+                if isinstance(child_0, ActivityInstance) and not child_0.label:
+                    if child_1 in loop_keys:
+                        for node in value:
+                            node_mapping[node] = loop_keys[child_1]
+                elif isinstance(child_1, ActivityInstance) and not child_1.label:
+                    if child_0 in loop_keys:
+                        for node in value:
+                            node_mapping[node] = loop_keys[child_0]
 
         return node_mapping
 

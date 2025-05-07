@@ -43,8 +43,8 @@ def _mine(orders):
         #
         # orders = new_orders
 
-        mapping_skips = SkipMiner.find_skips(orders)
-        orders = apply_node_mapping(orders, mapping_skips)
+        mapping_skips, new_nodes_counter = SkipMiner.find_skips(orders)
+        orders = apply_node_mapping(orders, mapping_skips, new_nodes_counter)
 
         order = combine_orders(orders)
         print(f"len order: {len(order.nodes)}")

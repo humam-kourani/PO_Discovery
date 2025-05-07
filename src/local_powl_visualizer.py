@@ -142,7 +142,7 @@ def add_order_edge(block, child_1, child_2, directory='forward', color="black", 
             block.edge(get_id_base(child_1), get_id_base(child_2), dir=directory, color=color, style=style)
 
 
-def repr_powl(powl, viz, color_map, level, skip_order=False, block_id=None):
+def repr_powl(powl, viz, color_map, level, skip_order=False, loop_order=False, block_id=None):
     font_size = "18"
     this_node_id = str(id(powl))
 
@@ -188,7 +188,22 @@ def repr_powl(powl, viz, color_map, level, skip_order=False, block_id=None):
             block.attr(label="")
             block.attr(fillcolor=current_color)
             if skip_order:
-                with importlib.resources.path("pm4py.visualization.powl.variants.icons", "skip-tag.svg") as gimg:
+                if loop_order:
+                    with importlib.resources.path("pm4py.visualization.powl.variants.icons", "skip-loop-tag.svg") as gimg:
+                        image = str(gimg)
+                        block.attr(label=f'''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                                                <TR><TD WIDTH="55" HEIGHT="27" FIXEDSIZE="TRUE"><IMG SRC="{image}" SCALE="BOTH"/></TD></TR>
+                                                </TABLE>>''')
+                        block.attr(labeljust='r')
+                else:
+                    with importlib.resources.path("pm4py.visualization.powl.variants.icons", "skip-tag.svg") as gimg:
+                        image = str(gimg)
+                        block.attr(label=f'''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                                                <TR><TD WIDTH="55" HEIGHT="27" FIXEDSIZE="TRUE"><IMG SRC="{image}" SCALE="BOTH"/></TD></TR>
+                                                </TABLE>>''')
+                        block.attr(labeljust='r')
+            elif loop_order:
+                with importlib.resources.path("pm4py.visualization.powl.variants.icons", "loop-tag.svg") as gimg:
                     image = str(gimg)
                     block.attr(label=f'''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
                                             <TR><TD WIDTH="55" HEIGHT="27" FIXEDSIZE="TRUE"><IMG SRC="{image}" SCALE="BOTH"/></TD></TR>
@@ -214,6 +229,16 @@ def repr_powl(powl, viz, color_map, level, skip_order=False, block_id=None):
                 return
             if isinstance(child_1, SilentTransition) and isinstance(child_0, StrictPartialOrder):
                 repr_powl(child_0, viz, color_map, level=level, skip_order=True, block_id=block_id)
+                return
+
+        if powl.operator == Operator.LOOP:
+            do = powl.children[0]
+            redo = powl.children[1]
+            if isinstance(do, SilentTransition) and isinstance(redo, StrictPartialOrder):
+                repr_powl(redo, viz, color_map, level=level, skip_order=True, loop_order=True, block_id=block_id)
+                return
+            if isinstance(redo, SilentTransition) and isinstance(do, StrictPartialOrder):
+                repr_powl(do, viz, color_map, level=level, loop_order=True, block_id=block_id)
                 return
 
         with viz.subgraph(name=block_id) as block:
